@@ -7,8 +7,8 @@ import math
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
-src_dir = '/home/nico/joli_masters/final_transform/by_indicator'
-output_dir = '/home/nico/joli_masters/final_transform/by_date'
+src_dir = '/home/nico/Code/joli_masters/final_transform/by_indicator'
+output_dir = '/home/nico/Code/joli_masters/final_transform/by_date'
 input_files = []
 start_date = date(2000, 12, 1)
 all_data = {}
@@ -54,7 +54,7 @@ for col in range(col_num-1):
         file_data.append(new_row)
 
     current_date = start_date + relativedelta(months=col)
-    current_date = current_date.strftime('%Y-%b')
+    current_date = current_date.strftime('%Y-%m')
 
     ignored_fields = ['0', '', '#DIV/0!', '#REF!']
     if chop_percentiles:
