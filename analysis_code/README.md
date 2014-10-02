@@ -16,7 +16,19 @@ look something like this:
     ...
 
 
-## 2. Total annual return
+## 2. Portfolio returns
+The aim of this is exercise is to group companies into evenly sized portfolios
+by the previous period's indicator. The period size can fluctuate from monthly to
+yearly (by monthly increments). There will be 4 outputs to be calculated:
+  weighted average excess return for the period
+  weighted average monthly return for the period
+  equally weighted excess return for the period
+  equally weighted monthly return for the period
+
+This process is repeated for each indicator and for multiple periods.
+
+
+## 3. Total annual return
 Calculate the total annual return per company per year. This is done by adding
 together each monthly return. This needs to be done for both the *monthly* and
 *excess* return values. The range is from Jan - Dec for each year. Included in
@@ -31,7 +43,3 @@ the output should be the indicators for last month of the previous year.
 There will only be 2 files, one for annual returns, and one for excess returns.
 A blank line should be left between years to clearly show the separation between
 years. The blank line may have the year in the first cell of the line.
-
-
-## 3. Portfolio returns
-
