@@ -3,7 +3,7 @@
 This code to produce the final values of the data. It no longer transforms the
 data, but uses the latest data to produce results for analysis.
 
-## 1. Company count
+## 1. Active company count
 
 Produce an output showing the number of active companies in each month. An
 active company is one with non-zero values for that month. This should be done

@@ -26,7 +26,7 @@ isActive i r = case (lookup i indicators) of
 
 
 activeCompanies :: Indicator -> MonthlyData -> Int
-activeCompanies i d = countActive $ map (isActive i) (tail (lines d))
+activeCompanies i d = countActive $ map (isActive i) $ tail $ lines d
 
 countActive :: [Bool] -> Int
-countActive l = length (filter (\x -> x == True) l)
+countActive l = length $ filter (\x -> x == True) l
