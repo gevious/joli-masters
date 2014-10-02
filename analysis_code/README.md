@@ -28,8 +28,8 @@ the output should be the indicators for last month of the previous year.
     Company name, Annual excess return, PSR, D/E, MV, BV_MV
     xyz, (sum jan-dec 2002), value for dec 2001, ...
 
-There will only be 2 files, with each of the year's data being included in a
-single file. A blank linke should be left to clearly show the separation between
+There will only be 2 files, one for annual returns, and one for excess returns.
+A blank line should be left between years to clearly show the separation between
 years. The blank line may have the year in the first cell of the line.
 
 

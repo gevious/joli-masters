@@ -1,5 +1,5 @@
 -- Calculates the number of active companies in a file based on an indicator
-module ActiveCompany (isActive, activeCompanies) where
+module ActiveCompany (isActive, activeCompanies, indicators) where
 
 import Data.List.Split (splitOn)
 
@@ -16,10 +16,12 @@ type Indicator = String
 type DataRow = String
 type MonthlyData = String
 
+delimiter = ";"
+
 isActive :: Indicator -> DataRow -> Bool
 -- sees if the company in the data row is in fact active
 isActive i r = case (lookup i indicators) of
-    Just idx -> not $ (splitOn "," r) !! idx `elem` ["0","#DIV/0!", "#REF!"]
+    Just idx -> not $ (splitOn delimiter r) !! idx `elem` ["0","#DIV/0!", "#REF!"]
     Nothing -> error "No indicator found"
 
 
