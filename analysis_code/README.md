@@ -27,6 +27,12 @@ yearly (by monthly increments). There will be 4 outputs to be calculated:
 
 This process is repeated for each indicator and for multiple periods.
 
+The final output needs will be annualised - so each individual sample output
+doesn't need to be produced, rather the final annualised result. eg
+
+    for yearly sample, calculate output for all 12 (or so) years, then divide
+    the result by 12 to get the average figure for the year.
+
 
 ## 3. Total annual return
 Calculate the total annual return per company per year. This is done by adding

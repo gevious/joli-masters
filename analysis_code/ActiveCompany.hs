@@ -10,7 +10,7 @@ indicators = [
     ("Excess return", 5),
     ("Market value", 6),
     ("Price Sales", 7),
-    ("Return monthly", 7)]
+    ("Return monthly", 8)]
 
 type Indicator = String
 type DataRow = String

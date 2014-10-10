@@ -38,7 +38,7 @@ for filename in sorted(os.listdir(src_dir), reverse=True):
                 new_row = ';'.join(row)
                 if len(last_month) > 0:
                     new_row += ";{};{}".format(
-                        last_month[i][4], last_month[i][8])
+                        last_month[i][5], last_month[i][8])
 
                 # print row
                 outfile.write(new_row + "\n")
