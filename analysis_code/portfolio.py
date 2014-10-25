@@ -12,7 +12,8 @@
 # setting affects only the way the returns column is calculated. All other
 # indicators are always calculated on Equally Weighted terms.
 #
-# Todo: build another indicator to select a limited company set by industry.
+# The output can be comprised of either all companies, or all excluding
+# financials and basic materials
 #
 #
 # OUTPUT:
@@ -24,27 +25,32 @@ import os
 import csv
 from operator import itemgetter
 
-period = 72
-portfolio_num = 10
-calc = "Equally Weighted"
-# calc = "Weighted Average"  # TODO
 start_file = "2001-12.csv"
 src_dir = "/home/nico/Code/joli_masters/analysis_code/data_by_date"
+# mapping for old data
+# indicators = {
+#     "BV_MV": 2,
+#     # "Beta": 3,
+#     "Debt equity ratio": 4,
+#     "Excess return": 5,
+#     "Market value": 6,
+#     "Price sales": 7,
+#     "Monthly return": 8
+# }
+# mapping for latest data
 indicators = {
     "BV_MV": 2,
-    # "Beta": 3,
-    "Debt equity ratio": 4,
-    "Excess return": 5,
-    "Market value": 6,
-    "Price sales": 7,
-    "Monthly return": 8
+    "Debt equity ratio": 3,
+    # "Market value": 4,  # original mv whic we're not using
+    "Market value": 5,  # actually LnMV, but thats our data in this case
+    "Price sales": 6,
+    # "Beta": 7,
+    "Excess return": 8,  # next month's return
+    "Monthly return": 9  # next month's return
 }
-output_filename = "{} - {}months ({} portfolios).csv".format(
-    calc, period, portfolio_num)
-output_data = []
 
 
-def _get_data(filename, sort=False):
+def _get_data(filename, all_companies, indicator, sort=False):
     """Get data from file into list of lists, and sort it by the relevant
        indicator (from smallest to largest)"""
     data = []
@@ -55,7 +61,10 @@ def _get_data(filename, sort=False):
             if i == 0:
                 continue
             r = row[0].split(',')
-            if r[idx] in ['', 0, '0', '#DIV/0!', '#REF!']:
+            if not all_companies and \
+                    r[1].lower() in ['financials', 'basic materials']:
+                continue
+            if r[idx] in ['', 0, '0', '#DIV/0!', '#REF!', 'Err:512']:
                 continue  # ignore company with no indicator value
             data.append(r)
 
@@ -65,11 +74,11 @@ def _get_data(filename, sort=False):
     return data
 
 
-def _setup_portfolios(filename):
+def _setup_portfolios(filename, portfolio_num, all_companies, indicator):
     """Populate global `portfolio_idx` dict with company:idx values for the
        existing sorted dataset"""
     print "Generating portfolio index from {}".format(filename)
-    data = _get_data(filename, sort=True)
+    data = _get_data(filename, all_companies, indicator, sort=True)
     l = len(data) / portfolio_num
     r = len(data) % portfolio_num
     nums = []
@@ -90,7 +99,7 @@ def _setup_portfolios(filename):
     return portfolio_idx
 
 
-def _get_portfolios(port_idx, filename):
+def _get_portfolios(port_idx, filename, portfolio_num, all_companies, indi):
     """Get a list of `portfolio_num` lists, each containing the list of
        companies in the portfolio. Basically just restructuring of data
        from one blob to portfolio lists"""
@@ -99,7 +108,7 @@ def _get_portfolios(port_idx, filename):
     portfolios = []
     for i in range(portfolio_num):
         portfolios.append([])
-    d = _get_data(filename)
+    d = _get_data(filename, all_companies, indi)
     skipped = 0
     added = 0
     missed_keys = port_idx.keys()
@@ -113,98 +122,174 @@ def _get_portfolios(port_idx, filename):
             skipped += 1
             # print "Ignoring {}".format(row[0])
 
+    # For weighted average
+    # somewhat inefficient, but usable for now. cycle through portfolios to get
+    # the total for the indicator. Then go through the portfolios again and
+    # save the company weighting to the last element of the row
+    #
+    # store weights in {portfolio_idx: total}
+    portfolio_total_returns = {}
+    if weighted_ave:
+
+        for p_idx, p in enumerate(portfolios):
+            i = 'Market value'
+            if p_idx not in portfolio_total_returns:
+                portfolio_total_returns[p_idx] = 0
+            # go through companies in portfolio and add up the totals
+            for c in p:
+                portfolio_total_returns[p_idx] += float(c[indicators[i]])
+
+    # (1month)(
+    # printing out portfolio
+#    print "COMPANIES:"
+#    for p_idx, p in enumerate(portfolios):
+#        print " -Portfolio {}".format(p_idx+1)
+#        for c in p:
+#            print "   {}".format(c[0])
+
     print "  - Added: {}/{}".format(added, len(port_idx))
     print "  - Skipped: {} (not in initial selection)".format(skipped)
     print "  - Missed: {} (company folded)".format(len(missed_keys))
     print "  - Totals: {},{},{},{},{}".format(
         len(portfolios[0]), len(portfolios[1]), len(portfolios[2]),
         len(portfolios[3]), len(portfolios[4]))
-    return portfolios
+    return portfolios, portfolio_total_returns
 
 
-def _annualised(data, month_num):
+def _annualised(data, month_num, weighted=False):
     """Returns annualised data.
          total / (month_num/12)
          = 12 * total / month_num ( for yearly figures)
     """
+    if weighted:
+        # ignore companies divisor for weighted, since we don't use it
+        return float(12 * 12 * data['sum']) / month_num
     return float(12 * 12 * data['sum'] / data['companies']) / month_num
 
 
-for indicator in indicators.keys():
-    # cycle through indicators which to use to order companies by in portfolio
-    if indicator in ['Excess return', 'Monthly return']:
-        continue
-    start_analysis = False
-    month_num = 0
-    total_months = 0
-    portfolio = {}
+def _get_weighted_average(company, p_idx, ptr):
+    return float(company[indicators['Monthly return']]) * \
+        float(company[indicators['Market value']]) / \
+        ptr[p_idx]
 
-    result = []  # stores the results for each portfolio
-    for i in range(portfolio_num):
-        result.append({})
-    for filename in sorted(os.listdir(src_dir)):
-        if filename == start_file:
-            start_analysis = True
-            # load data so we can generate the portfolio
-            port_idx = _setup_portfolios(filename)
-            continue
-        if not start_analysis:
-            continue
 
-        # get data in portfolio format
-        portfolios = _get_portfolios(port_idx, filename)
-        for p_num, p in enumerate(portfolios):
-            # get the summation of all values and add them to the result
-            company_num = 0
-            for i, i_idx in indicators.iteritems():
-                v = 0
-                l = len(p)
-                for company in p:
-                    t = company[i_idx]
-                    if t in [0, 'O', '#DIV/0!', '#REF!', '']:
-                        l -= 1
-                    else:
-                        v += float(t)
-                company_num += l
-                if calc == 'Weighted Average' \
-                        and i in ['Excess returns', 'Monthly returns']:
-                    # Calculate this result as weighted average
-                    pass
-                else:
-                    # Using Equally Weighted calculation
+def generate_output(period, portfolio_num, all_companies, weighted_ave):
+    output_data = []
+    output_filename = "{} ({}) - {}months ({} portfolios).csv".format(
+        'weighted average' if weighted_ave else 'equally weighted',
+        'all companies' if all_companies else 'fin&materials',
+        period, portfolio_num)
+
+    for indicator in indicators.keys():
+        # cycle through indicators to use to order companies by in portfolio
+        if indicator in ['Excess return', 'Monthly return']:
+            continue
+        start_analysis = False
+        month_num = 0
+        total_months = 0
+
+        # stores the results for each portfolio
+        # [{<indicator>:{sum: companies:}, ...}, {...}]
+        result = []
+        for i in range(portfolio_num):
+            result.append({})
+        for filename in sorted(os.listdir(src_dir)):
+            if filename == start_file:
+                start_analysis = True
+                # load data so we can generate the portfolio
+                port_idx = _setup_portfolios(filename, portfolio_num,
+                                             all_companies, indicator)
+                continue
+            if not start_analysis:
+                continue
+
+            # get data in portfolio format ( same format as the file)
+            # only split by portfolio in memory.
+            portfolios, portfolio_total_returns = \
+                _get_portfolios(port_idx, filename, portfolio_num,
+                                all_companies, indicator)
+            for p_num, p in enumerate(portfolios):
+                # get the summation of all values and add them to the result
+                company_num = 0
+                for i, i_idx in indicators.iteritems():
+                    v = 0
+                    l = len(p)
+                    for company in p:
+                        t = company[i_idx]
+                        if t in [0, 'O', '#DIV/0!', '#REF!', '', 'Err:512']:
+                            l -= 1
+                        else:
+                            if weighted_ave and i in ['Monthly return']:
+                                # using weighted average for monthly
+                                # returns
+                                # Calculate this result as weighted average
+                                # v contains the new value, l gets reset to 1
+
+                                # calculation:
+                                # (company return * company market value)
+                                # ---------------------------------------
+                                #       portfolio market value
+                                #
+                                v += _get_weighted_average(
+                                    company, p_num, portfolio_total_returns)
+                            else:
+                                # average weighted
+                                v += float(t)
+                    company_num += l
                     if i not in result[p_num]:
+                        # first month
                         result[p_num][i] = {'sum': v, 'companies': l}
                     else:
+                        # rest of the months
                         result[p_num][i]['sum'] += v
                         result[p_num][i]['companies'] += l
-            result[p_num]['ave_companies'] = company_num / len(indicators)
+                result[p_num]['ave_companies'] = company_num / len(indicators)
 
-        # reset portfolios
-        month_num += 1
-        total_months += 1
-        if month_num == period:
-            month_num = 0
-            port_idx = _setup_portfolios(filename)
+            # reset portfolios
+            month_num += 1
+            # ---
+            total_months += 1
+            # (1month)
+    #                    if total_months == 2:
+    #                        break
+            if month_num == period:
+                month_num = 0
+                port_idx = _setup_portfolios(filename, portfolio_num,
+                                             all_companies, indicator)
 
-    # now that we have collated all information, lets print it out nicely
-    output_data.append(
-        "Indicator order: {}, returns calc: {}, period: {} months".format(
-            indicator, calc, period))
-    output_data.append(
-        "Name;Excess Return;Monthly Return;PSR;D/E;MV;BV/MV;Ave Companies")
-    for p_num, r in enumerate(result):
-        output_data.append("Portfolio {};{};{};{};{};{};{};{}".format(
-            p_num+1,
-            _annualised(r['Excess return'], total_months),
-            _annualised(r['Monthly return'], total_months),
-            _annualised(r['Price sales'], total_months),
-            _annualised(r['Debt equity ratio'], total_months),
-            _annualised(r['Market value'], total_months),
-            _annualised(r['BV_MV'], total_months),
-            r['ave_companies']
-        ))
-    output_data.append("")
+        # now that we have collated all information, lets print it out nicely
+        output_data.append(
+            "Indicator order: {}, returns calc: {}, period: {} months".format(
+                indicator,
+                'weighted ave' if weighted_ave else 'equally weighted',
+                period))
+        output_data.append(
+            "Name;Excess Return;Monthly Return;PSR;D/E;MV;BV/MV;Ave Companies")
+        for p_num, r in enumerate(result):
+            output_data.append("Portfolio {};{};{};{};{};{};{};{}".format(
+                p_num+1,
+                _annualised(r['Excess return'], total_months),
+                _annualised(r['Monthly return'], total_months, weighted_ave),
+                _annualised(r['Price sales'], total_months),
+                _annualised(r['Debt equity ratio'], total_months),
+                _annualised(r['Market value'], total_months),
+                _annualised(r['BV_MV'], total_months),
+                r['ave_companies']
+            ))
+        output_data.append("")
 
-with open("/tmp/joli/{}".format(output_filename), 'w') as f:
-    for o in output_data:
-        f.write(o + "\n")
+    with open("/tmp/joli/{}".format(output_filename), 'w') as f:
+        for o in output_data:
+            f.write(o + "\n")
+
+# --- start here
+# period = 1
+# portfolio_num = 5
+# all_companies=True
+# weighted_ave = True # False for Equally weighted return
+for period in [1, 12, 36, 72]:
+    for portfolio_num in [5, 10]:
+        for all_companies in [True, False]:
+            for weighted_ave in [True, False]:
+                generate_output(period, portfolio_num, all_companies,
+                                weighted_ave)
