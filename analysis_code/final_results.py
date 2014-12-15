@@ -40,21 +40,23 @@ class MonthlyAnalysis():
                     continue
                 if r[idx] in ['', 0, '0', '#DIV/0!', '#REF!', 'Err:512']:
                     continue  # ignore company with no indicator value
-                data.append(r)
+                new_row = []
+                for z in r:
+                    try:
+                        new_row.append(float(z))
+                    except ValueError:
+                        new_row.append(z)
+
+                data.append(new_row)
 
         # sort data from lowest to highest by indicator
         self.data = sorted(data, key=itemgetter(idx))
-#        print '- raw data -'
-#        for k in self.data:
-#            print k
-#        print '- end raw data -'
-        # self.data = data
 
     def _get_company_value(self, data, indicator):
         v = data[self.ind_map[indicator]]
         if v in ['', 0, '0', '#DIV/0!', '#REF!', 'Err:512']:
             return 0
-        return float(v)
+        return v
 
     def allocate_companies(self, portfolio_num, **kwargs):
         """Divides companies into `portfolio_num` portfolios"""
@@ -120,8 +122,8 @@ class MonthlyAnalysis():
                         f.write("{};{};{};{};{};{}\n".format(
                             d['name'], d['mr'], d['er'], d['mv'], d['weight'],
                             d['psr']))
+
         self.portfolios = portfolios
-#        print '= New portfolios ='
         return portfolios
 
     def sort_data(self):
@@ -135,12 +137,12 @@ class MonthlyAnalysis():
                     if d[0] == c['name']:
                         x = {
                             'name': d[0],
-                            'mr': float(d[self.ind_map['nm monthly return']]),
-                            'er': float(d[self.ind_map['nm excess return']]),
-                            'psr': float(d[self.ind_map['price sales']]),
-                            'de': float(d[self.ind_map['debt equity']]),
-                            'bv_mv': float(d[self.ind_map['bv_mv']]),
-                            'mv': float(d[self.ind_map['market value']]),
+                            'mr': d[self.ind_map['nm monthly return']],
+                            'er': d[self.ind_map['nm excess return']],
+                            'psr': d[self.ind_map['price sales']],
+                            'de': d[self.ind_map['debt equity']],
+                            'bv_mv': d[self.ind_map['bv_mv']],
+                            'mv': d[self.ind_map['market value']],
                             'weight': c['weight']
                         }
                         self.sorted_data[p_num].append(x)
@@ -161,7 +163,7 @@ class MonthlyAnalysis():
         p = self.sorted_data[portfolio_no]
         total = 0
         for c in p:
-            total += float(c['mr']) * c['weight']
+            total += c['mr'] * c['weight']
         return total
 
     def excess_return(self, portfolio_no):
@@ -230,46 +232,62 @@ def print_output(totals, indicator, rebalance_period, month_no,
             annualised(v['bv_mv'], month_no)/12,
             int(round(float(v['total_co']) / month_no))
         )
+    t += "\n"
+    return t
 
-    print t
-
-rebalance_period = 1  # how many months to test before rebalancing portfolios
-# industries = ['*']
-industries = ['financials', 'basic materials']
-
-# -- start working
-
-total_months = 0
-month_break = 0  # run analysis for x months. if x == 0, then run for all
+month_break = 1  # run analysis for x months. if x == 0, then run for all
 a = MonthlyAnalysis()
-tmp_sum = 0
-# for portfolio_num in [5, 10]:
-for portfolio_num in [5]:
-    totals = {}
-    # reset totals to 0 at the beginning of this operation
-    for i in range(portfolio_num):
-        totals[i] = {}
-        for k in ['mr', 'mr_wa', 'er', 'psr', 'de', 'mv', 'bv_mv', 'total_co']:
-            totals[i][k] = 0
-    for indicator in ['price sales', 'bv_mv', 'debt equity', 'market value']:
-        for month_no, filename in enumerate(sorted(os.listdir(src_dir))):
-            total_months += 1
-            a.load_data("{}/{}".format(src_dir, filename),
-                        indicator, industries)
-            if month_no % rebalance_period == 0:
-                a.allocate_companies(portfolio_num, output=True)
-            a.sort_data()
-            for p in range(portfolio_num):
-                totals[p]['mr_wa'] += a.monthly_return_wa(p)
-                totals[p]['mr'] += a.monthly_return(p)
-                totals[p]['er'] += a.excess_return(p)
-                totals[p]['psr'] += a.price_sales(p)
-                totals[p]['de'] += a.debt_equity(p)
-                totals[p]['mv'] += a.market_value(p)
-                totals[p]['bv_mv'] += a.book_value_mv(p)
-                totals[p]['total_co'] += a.total_c_num(p)
-            if month_break > 0 and (month_no + 1) == month_break:
-                break
+# ignore_2008_9 = False
+# rebalance_period = 1  # how many months to test before rebalancing portfolios
+# industries = ['*']
+# industries = ['financials', 'basic materials']
 
-        print_output(totals, indicator, rebalance_period, total_months,
-                     industries, portfolio_num)
+for rebalance_period in [1, 12, 36, 72]:
+    for industries in [['*'], ['financials', 'basic materials']]:
+        for ignore_2008_9 in [True, False]:
+            summary_output = []
+            for portfolio_num in [5]:
+                for indicator in ['price sales', 'bv_mv',
+                                  'debt equity', 'market value']:
+                    totals = {}
+                    # reset totals to 0 at the beginning of this operation
+                    for i in range(portfolio_num):
+                        totals[i] = {}
+                        for k in ['mr', 'mr_wa', 'er', 'psr', 'de',
+                                  'mv', 'bv_mv', 'total_co']:
+                            totals[i][k] = 0
+                    for month_no, filename in enumerate(
+                            sorted(os.listdir(src_dir))):
+                        if ignore_2008_9:
+                            if filename.find('2008') > -1 or \
+                                    filename.find('2009') > -1:
+                                continue
+                        a.load_data("{}/{}".format(src_dir, filename),
+                                    indicator, industries)
+                        if month_no % rebalance_period == 0:
+                            a.allocate_companies(portfolio_num, output=True)
+                        a.sort_data()
+                        print a.sorted_data[0]
+                        print len(a.sorted_data[0])
+                        for p in range(portfolio_num):
+                            totals[p]['mr_wa'] += a.monthly_return_wa(p)
+                            totals[p]['mr'] += a.monthly_return(p)
+                            totals[p]['er'] += a.excess_return(p)
+                            totals[p]['psr'] += a.price_sales(p)
+                            totals[p]['de'] += a.debt_equity(p)
+                            totals[p]['mv'] += a.market_value(p)
+                            totals[p]['bv_mv'] += a.book_value_mv(p)
+                            totals[p]['total_co'] += a.total_c_num(p)
+                        if month_break > 0 and (month_no + 1) == month_break:
+                            break
+
+                    summary_output.append(
+                        print_output(totals, indicator, rebalance_period,
+                                     month_no, industries, portfolio_num))
+
+                filename = "/tmp/results/{}month_{}{}.csv".format(
+                    rebalance_period, 'all' if industries == ['*'] else 'fb',
+                    '_excl89' if ignore_2008_9 else '')
+                with open(filename, 'w') as f:
+                    for s in summary_output:
+                        f.write(s)
